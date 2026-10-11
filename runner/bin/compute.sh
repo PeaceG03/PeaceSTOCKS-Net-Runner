@@ -21,7 +21,13 @@ if [ "$rc" -ne 0 ]; then
   fi
   echo "FAIL run"; exit 1
 fi
-if [ "$mode" = full ]; then
-  [ -f "$out/results/models/latest.json" ] || { echo "FAIL no model"; exit 1; }
+if [ "$mode" = full ] && [ ! -f "$out/results/models/latest.json" ]; then
+  # Net's completeness gate stopped the contiguous replay at the first incomplete session: it writes its run
+  # file only (stoppedAt + reason, readyForPeace false) and no forecast or model. That lands as a run file.
+  if [ -z "$(find "$out/results" -mindepth 1 ! -path "$out/results/runs" ! -path "$out/results/runs/*" -print -quit)" ] \
+     && grep -qs '"mode":"stopped"' "$out/results/runs/"*.json; then
+    echo "STOPPED compute (completeness gate; not ready for Peace)"; exit 0
+  fi
+  echo "FAIL no model"; exit 1
 fi
 echo "PASS compute"
