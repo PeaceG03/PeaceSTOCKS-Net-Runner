@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Installs a pinned age release (sha256-checked) into $RUNNER_TEMP/age-bin and adds it to the PATH.
+# Builds a pinned age release with `go install`. The module hash is checked against the Go checksum database
+# (sum.golang.org) by the go command, and also against the h1 hash pinned here (from sum.golang.org's lookup
+# for filippo.io/age@v1.2.1), so the source is not a file we downloaded ourselves. Adds age to the PATH.
 set -euo pipefail
 ver=v1.2.1
-sum=7df45a6cc87d4da11cc03a539a7470c15b1041ab2b396af088fe9990f7c79d50
+sum='h1:X0TZjehAZylOIj4DubWYU1vWQxv9bJpo+Uu2/LGhi1o='
 dir="${RUNNER_TEMP:-/tmp}/age-bin"
 mkdir -p "$dir"
-curl -fsSL -o "$dir/age.tgz" "https://github.com/FiloSottile/age/releases/download/$ver/age-$ver-linux-amd64.tar.gz"
-echo "$sum  $dir/age.tgz" | sha256sum -c --quiet - || { echo "FAIL age checksum"; exit 1; }
-tar -xzf "$dir/age.tgz" -C "$dir" --strip-components=1 age/age
-rm -f "$dir/age.tgz"
+export GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GONOSUMDB= GONOSUMCHECK= GOPRIVATE= GOINSECURE= GOFLAGS= GOTOOLCHAIN=local
+got="$(cd "$dir" && go mod download -json "filippo.io/age@$ver" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("Sum",""))')"
+[ "$got" = "$sum" ] || { echo "FAIL age module hash"; exit 1; }
+GOBIN="$dir" go install "filippo.io/age/cmd/age@$ver" >/dev/null 2>&1 || { echo "FAIL age build"; exit 1; }
+[ "$("$dir/age" --version)" = "$ver" ] || { echo "FAIL age version"; exit 1; }
 [ -n "${GITHUB_PATH:-}" ] && echo "$dir" >> "$GITHUB_PATH"
 echo "PASS age"
