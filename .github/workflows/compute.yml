@@ -6,6 +6,12 @@ on:
   schedule:
     - cron: "41 11 * * 1-5"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "full (replay + forecast) or proof (load newest session only)"
+        type: choice
+        options: [full, proof]
+        default: full
 
 permissions: {}
 
@@ -22,7 +28,7 @@ jobs:
       (github.event_name == 'schedule' ||
        (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'PeaceG03'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 300
     environment: net-read
     permissions:
       contents: read
@@ -36,11 +42,26 @@ jobs:
         env:
           DEPLOY_KEY: ${{ secrets.NET_READ_DEPLOY_KEY }}
         run: ./runner/bin/clone-net.sh "$RUNNER_TEMP/net"
+      - name: Prepare
+        run: ./runner/bin/prepare-net.sh "$RUNNER_TEMP/net"
+      # The read-only R2 token reaches only the two steps below, mapped to the reader's names here.
+      # Account id and bucket come from this environment; nothing about them is in this repo or its logs.
+      - name: R2 probe
+        env:
+          PEACESTOCKS_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          PEACESTOCKS_R2_BUCKET: ${{ vars.R2_BUCKET }}
+          PEACESTOCKS_R2_ACCESS_KEY_ID: ${{ secrets.R2_READ_ACCESS_KEY_ID }}
+          PEACESTOCKS_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_READ_SECRET_ACCESS_KEY }}
+        run: ./runner/bin/r2-probe.sh "$RUNNER_TEMP/net"
       - name: Compute
         env:
-          # Synthetic sample until the read-only R2 token exists; then NET_SOURCE becomes r2.
-          NET_SOURCE: sample
-          R2_READ_TOKEN: ${{ secrets.R2_READ_TOKEN }}
+          NET_SOURCE: r2
+          NET_ALLOW_R2_READ: "1"
+          NET_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}
+          PEACESTOCKS_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          PEACESTOCKS_R2_BUCKET: ${{ vars.R2_BUCKET }}
+          PEACESTOCKS_R2_ACCESS_KEY_ID: ${{ secrets.R2_READ_ACCESS_KEY_ID }}
+          PEACESTOCKS_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_READ_SECRET_ACCESS_KEY }}
         run: ./runner/bin/compute.sh "$RUNNER_TEMP/net" "$RUNNER_TEMP/out" 2>/dev/null || { echo "FAIL compute"; exit 1; }
       - name: Seal
         run: ./runner/bin/seal.sh "$RUNNER_TEMP/out" "$RUNNER_TEMP/sealed/results.tar.age"
