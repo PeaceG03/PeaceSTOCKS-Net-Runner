@@ -16,6 +16,10 @@ on:
         description: "seal Net's private failure diagnostics instead of failing (owner dispatch only)"
         type: boolean
         default: false
+      net_ref:
+        description: "run exactly this Net commit (full 40-hex SHA); empty = Net main"
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -45,9 +49,17 @@ jobs:
       - name: Read Net
         env:
           DEPLOY_KEY: ${{ secrets.NET_READ_DEPLOY_KEY }}
+          # Scheduled runs: empty (Net main). Validated and verified in clone-net.sh (fails closed).
+          NET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.net_ref || '' }}
         run: ./runner/bin/clone-net.sh "$RUNNER_TEMP/net"
       - name: Prepare
         run: ./runner/bin/prepare-net.sh "$RUNNER_TEMP/net"
+      - name: Verify Net ref
+        env:
+          NET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.net_ref || '' }}
+        run: |
+          [ -z "$NET_REF" ] && { echo "PASS net main"; exit 0; }
+          [ "$(git -C "$RUNNER_TEMP/net" rev-parse HEAD)" = "$NET_REF" ] && echo "PASS net ref verify" || { echo "FAIL net ref verify"; exit 1; }
       # The read-only R2 token reaches only the two steps below, mapped to the reader's names here.
       # Account id and bucket come from this environment; nothing about them is in this repo or its logs.
       - name: R2 probe
