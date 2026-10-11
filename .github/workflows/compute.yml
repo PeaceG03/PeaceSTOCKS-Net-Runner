@@ -12,6 +12,10 @@ on:
         type: choice
         options: [full, proof]
         default: full
+      diagnose:
+        description: "seal Net's private failure diagnostics instead of failing (owner dispatch only)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -58,6 +62,7 @@ jobs:
           NET_SOURCE: r2
           NET_ALLOW_R2_READ: "1"
           NET_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}
+          NET_DIAG: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose && '1' || '0' }}
           PEACESTOCKS_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           PEACESTOCKS_R2_BUCKET: ${{ vars.R2_BUCKET }}
           PEACESTOCKS_R2_ACCESS_KEY_ID: ${{ secrets.R2_READ_ACCESS_KEY_ID }}
