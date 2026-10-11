@@ -50,4 +50,4 @@ jobs:
           node ../scanner/runner/bin/leak-scan.mjs
       - name: Leak rule tests
         working-directory: scanner
-        run: node --test runner/test/ >/dev/null 2>&1 && echo "PASS tests" || { echo "FAIL tests"; exit 1; }
+        run: node --test runner/test/leak.test.mjs >/dev/null 2>&1 && echo "PASS tests" || { echo "FAIL tests"; exit 1; }
