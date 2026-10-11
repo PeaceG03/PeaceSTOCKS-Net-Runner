@@ -1,0 +1,27 @@
+name: key-proof
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  net-key:
+    name: net key (a, b)
+    if: >-
+      github.repository == 'PeaceG03/PeaceSTOCKS-Net-Runner' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'PeaceG03' && github.triggering_actor == 'PeaceG03'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: net-read
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prove Net key scope
+        env:
+          DEPLOY_KEY: ${{ secrets.NET_READ_DEPLOY_KEY }}
+        run: ./runner/bin/key-proof-net.sh

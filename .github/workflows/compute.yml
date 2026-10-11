@@ -1,0 +1,55 @@
+name: compute
+
+# Public compute only. Never runs on pull_request: the net-read environment is main-only and this workflow
+# has no PR trigger. Results leave only as an age-encrypted artifact (1-day retention) that Net collects.
+on:
+  schedule:
+    - cron: "41 11 * * 1-5"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: compute
+  cancel-in-progress: false
+
+jobs:
+  compute:
+    name: compute
+    if: >-
+      github.repository == 'PeaceG03/PeaceSTOCKS-Net-Runner' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'PeaceG03'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: net-read
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install age
+        run: ./runner/bin/install-age.sh
+      - name: Read Net
+        env:
+          DEPLOY_KEY: ${{ secrets.NET_READ_DEPLOY_KEY }}
+        run: ./runner/bin/clone-net.sh "$RUNNER_TEMP/net"
+      - name: Compute
+        env:
+          # N0: referenced only. Architect is adding the read-only R2 token; it is unused until N2.
+          R2_READ_TOKEN: ${{ secrets.R2_READ_TOKEN }}
+        run: ./runner/bin/compute.sh "$RUNNER_TEMP/net" "$RUNNER_TEMP/out" 2>/dev/null || { echo "FAIL compute"; exit 1; }
+      - name: Seal
+        run: ./runner/bin/seal.sh "$RUNNER_TEMP/out" "$RUNNER_TEMP/sealed/results.tar.age"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: results-enc
+          path: ${{ runner.temp }}/sealed/results.tar.age
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+      - name: Delete Net and plaintext
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/net" "$RUNNER_TEMP/out" "$RUNNER_TEMP"/net-ssh.* "$RUNNER_TEMP"/results.*.tar

@@ -1,0 +1,53 @@
+name: leak-check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  leak-check:
+    name: leak-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the code under review
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: target
+      - name: Check out the scanner from main (so a PR cannot weaken it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+          path: scanner
+      - name: Leak, scope and workflow rules
+        working-directory: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) export LEAK_BASE_SHA="$PR_BASE_SHA" LEAK_REQUIRE_BASE=true ;;
+            push)
+              if [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+                export LEAK_BASE_SHA="$PUSH_BEFORE" LEAK_SKIP_SCOPE=true
+              fi ;;
+          esac
+          node ../scanner/runner/bin/leak-scan.mjs
+      - name: Leak rule tests
+        working-directory: scanner
+        run: node --test runner/test/ >/dev/null 2>&1 && echo "PASS tests" || { echo "FAIL tests"; exit 1; }
