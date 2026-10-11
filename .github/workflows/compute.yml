@@ -22,7 +22,7 @@ jobs:
       (github.event_name == 'schedule' ||
        (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'PeaceG03'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: net-read
     permissions:
       contents: read
@@ -38,7 +38,8 @@ jobs:
         run: ./runner/bin/clone-net.sh "$RUNNER_TEMP/net"
       - name: Compute
         env:
-          # N0: referenced only. Architect is adding the read-only R2 token; it is unused until N2.
+          # Synthetic sample until the read-only R2 token exists; then NET_SOURCE becomes r2.
+          NET_SOURCE: sample
           R2_READ_TOKEN: ${{ secrets.R2_READ_TOKEN }}
         run: ./runner/bin/compute.sh "$RUNNER_TEMP/net" "$RUNNER_TEMP/out" 2>/dev/null || { echo "FAIL compute"; exit 1; }
       - name: Seal
